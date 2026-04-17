@@ -22,7 +22,7 @@ with st.sidebar:
 # 4. Input Handling
 final_list = []
 if mode == "Manual":
-    raw_text = st.sidebar.text_area("List Products:", "lamb\nbeef\n7210")
+    raw_text = st.sidebar.text_area("List Products:", "beef\n0203\npizza\n7210\ntimber")
     if raw_text:
         final_list = [i.strip() for i in raw_text.split('\n') if i.strip()]
 else:
@@ -37,7 +37,7 @@ if st.sidebar.button("🚀 Run Compliance Check"):
         st.error("⚠️ No items found.")
     else:
         results = []
-        with st.spinner('🎡 Spinning the wheel... checking Chapter Ranges and HMRC rules...'):
+        with st.spinner('🎡 Spinning the wheel... checking Chapters, Keywords, and Dual-Use lists...'):
             # Timezone Setup
             try:
                 tz = pytz.timezone('Europe/London')
@@ -47,31 +47,35 @@ if st.sidebar.button("🚀 Run Compliance Check"):
             
             for item in final_list:
                 item_str = str(item).lower()
-                # Extract first 2 digits (The Chapter)
                 digits = ''.join(filter(str.isdigit, item_str))
                 chapter = digits[:2] if len(digits) >= 2 else ""
                 
-                # Default Setup
+                # Default
                 lane, advice, color = "Green Lane", "UKIMS Only", "green"
                 
-                # --- RULE 1: CATEGORY 1 (RED) - INDUSTRIAL CONTROLS ---
-                if chapter in ["72", "73", "76", "28", "29"] or any(x in item_str for x in ["steel", "aluminum", "iron", "chemical"]):
-                    lane, advice, color = "Category 1 (Red)", "Full Customs Declaration Required", "red"
+                # --- RULE 1: CATEGORY 1 (RED) - INDUSTRIAL & DUAL-USE ---
+                # Chapters 72-73 (Steel), 76 (Alu), 28-29 (Chem), 84-85 (Tech/Machinery)
+                red_chapters = ["72", "73", "76", "28", "29", "84", "85"]
+                red_keywords = ["steel", "aluminum", "iron", "chemical", "precision", "sensor", "drone", "military"]
                 
-                # --- RULE 2: CATEGORY 2 (ORANGE) - SPS / VETERINARY ---
-                # Added lamb, mutton, venison, poultry, and specific meat chapters
-                sps_chapters = ["01", "02", "03", "04", "05", "07", "08", "09", "10", "12", "16"]
-                sps_keywords = [
-                    "beef", "pork", "chicken", "lamb", "mutton", "venison", "poultry", 
-                    "meat", "cheese", "dairy", "fish", "prawn", "seafood", "milk", 
-                    "fruit", "veg", "sausage", "bacon", "ham"
+                if chapter in red_chapters or any(x in item_str for x in red_keywords):
+                    lane, advice, color = "Category 1 (Red)", "Full Customs Declaration / License Check Required", "red"
+                
+                # --- RULE 2: CATEGORY 2 (ORANGE) - SPS & COMPOSITE ---
+                # Chapters 01-16 (SPS), 19-21 (Composite/Prepared Food), 44 (Timber)
+                orange_chapters = ["01", "02", "03", "04", "05", "07", "08", "09", "10", "12", "16", "19", "21", "44"]
+                orange_keywords = [
+                    "beef", "pork", "chicken", "lamb", "mutton", "venison", "poultry", "meat", 
+                    "cheese", "dairy", "fish", "prawn", "seafood", "milk", "fruit", "veg", 
+                    "sausage", "bacon", "ham", "pizza", "lasagna", "ready meal", "pasta", 
+                    "timber", "wood", "logs", "plant", "flower"
                 ]
                 
-                if chapter in sps_chapters or any(x in item_str for x in sps_keywords):
-                    lane, advice, color = "Category 2 (Orange)", "NIRMS: Health Cert (CHED-P) + 'Not for EU' Label", "orange"
+                if (chapter in orange_chapters or any(x in item_str for x in orange_keywords)) and color != "red":
+                    lane, advice, color = "Category 2 (Orange)", "NIRMS: Health Cert (CHED) + 'Not for EU' Label", "orange"
 
                 # --- RULE 3: EXCISE (ORANGE) ---
-                elif chapter == "22" or "alcohol" in item_str:
+                elif (chapter == "22" or "alcohol" in item_str) and color != "red":
                     lane, advice, color = "Category 2 (Orange)", "Excise Controls: Duty & Movement rules apply", "orange"
 
                 # --- RULE 4: API SEARCH (The Safety Net) ---
@@ -80,7 +84,7 @@ if st.sidebar.button("🚀 Run Compliance Check"):
                         res = requests.get(f"https://www.trade-tariff.service.gov.uk/xi/api/v2/headings/{digits[:4]}", timeout=5)
                         if res.status_code == 200:
                             raw = res.text.lower()
-                            if any(term in raw for term in ["veterinary", "animal health", "sanitary"]):
+                            if any(term in raw for term in ["veterinary", "animal health", "sanitary", "phytosanitary"]):
                                 lane, advice, color = "Category 2 (Orange)", "NIRMS: Health Cert Required", "orange"
                     except:
                         pass
