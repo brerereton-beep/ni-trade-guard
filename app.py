@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 from datetime import datetime
+import pytz  # This is the library that handles timezones
 
 # 1. Page Config
 st.set_page_config(page_title="NI Trade Guard Pro", page_icon="🛡️", layout="wide")
@@ -37,8 +38,9 @@ if st.sidebar.button("🚀 Run Compliance Check"):
     else:
         results = []
         with st.spinner('🔍 Verifying shipment compliance...'):
-            # Grab current time for the audit trail
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+            # --- FIX: Explicitly set to London/Belfast time ---
+            tz = pytz.timezone('Europe/London')
+            timestamp = datetime.now(tz).strftime("%Y-%m-%d %H:%M")
             
             for item in final_list:
                 item_str = str(item).lower()
@@ -46,15 +48,10 @@ if st.sidebar.button("🚀 Run Compliance Check"):
                 
                 lane, advice, color = "Green Lane", "UKIMS Only", "green"
                 
-                # Priority 1: Category 1 (RED)
                 if any(x in item_str for x in ["steel", "72", "73", "aluminum", "76", "iron"]):
                     lane, advice, color = "Category 1 (Red)", "Full Customs Declaration Required", "red"
-                
-                # Priority 2: Category 2 (ORANGE)
                 elif any(x in item_str for x in ["beef", "pork", "chicken", "meat", "cheese", "dairy", "020", "040", "milk"]):
                     lane, advice, color = "Category 2 (Orange)", "NIRMS: Health Cert (CHED-P) + 'Not for EU' Label", "orange"
-
-                # Priority 3: API Check
                 elif digits:
                     try:
                         res = requests.get(f"https://www.trade-tariff.service.gov.uk/xi/api/v2/headings/{digits[:4]}", timeout=5)
@@ -64,7 +61,7 @@ if st.sidebar.button("🚀 Run Compliance Check"):
                         pass
 
                 results.append({
-                    "Date Verified": timestamp, # INJECTED COLUMN
+                    "Date Verified": timestamp,
                     "Product": item, 
                     "Lane": lane, 
                     "Action": advice, 
@@ -82,17 +79,15 @@ if st.sidebar.button("🚀 Run Compliance Check"):
         if results:
             st.divider()
             st.subheader("📋 Shipment Audit Summary")
-            # Drop color for the display table
             df_final = pd.DataFrame(results).drop(columns=['color'])
-            
-            # Show table
             st.table(df_final)
             
-            # Download
+            # Download with Corrected Filename Timestamp
+            fn_time = datetime.now(tz).strftime('%Y%m%d_%H%M')
             csv_file = df_final.to_csv(index=False).encode('utf-8')
             st.download_button(
                 label="📥 Download Official Audit Report",
                 data=csv_file,
-                file_name=f"NI_Audit_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                file_name=f"NI_Audit_{fn_time}.csv",
                 mime="text/csv"
             )
