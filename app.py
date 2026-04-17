@@ -5,7 +5,7 @@ import pandas as pd
 # 1. Page Config
 st.set_page_config(page_title="NI Trade Guard Pro", page_icon="🛡️", layout="wide")
 
-# 2. Centered & Stacked Logo Styling
+# 2. Animation Styling (No Overlap)
 st.markdown("""
     <style>
         .header-unit { text-align: center; padding: 10px; margin-bottom: 20px; }
@@ -25,12 +25,24 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 3. Sidebar
+# 3. Sidebar with REAL Contacts
 with st.sidebar:
-    st.markdown("<div style='text-align: center;'><h1>🛡️ Control Panel</h1></div>", unsafe_allow_html=True)
+    st.markdown("<div style='text-align: center;'><h1>🛡️ Resources</h1></div>", unsafe_allow_html=True)
     mode = st.radio("Mode:", ["Manual Entry", "Bulk CSV"])
     st.divider()
-    st.markdown("### 📞 Support Desk\n**Phone:** +44 28 XXXX XXXX\n**Email:** support@nitradeguard.com")
+    
+    st.subheader("📞 Official Helplines")
+    st.markdown("""
+    **Trader Support (TSS)**
+    0800 060 8888
+    
+    **DAERA Helpdesk**
+    0300 200 7840
+    
+    **NIRMS Helpline (APHA)**
+    0300 020 0301
+    """)
+    st.info("Operating: Mon-Fri (8:30am - 5pm)")
 
 # 4. Header
 st.markdown("""
@@ -41,7 +53,7 @@ st.markdown("""
             <div class="logo-item">🚛</div>
         </div>
         <div class="clean-title">NI Trade Guard Pro</div>
-        <div style="color: gray;">Real-time Windsor Framework Decision Support</div>
+        <div style="color: gray;">Windsor Framework Decision Support</div>
     </div>
 """, unsafe_allow_html=True)
 
@@ -75,21 +87,19 @@ if st.sidebar.button("🚀 Run Compliance Check") and items:
                 elif code[:2] in ['01','02','03','04','05'] or "veterinary" in raw:
                     lane, advice, color = "Category 2 (Orange)", "NIRMS: Health Cert (CHED-P) + 'Not for EU' Labels", "orange"
 
-            # Results Display
             with st.expander(f"{item} — {lane}", expanded=True):
                 if color == 'red':
                     st.error(f"🚨 **Action:** {advice}")
-                    st.markdown("[View Full Customs Guidance](https://www.gov.uk/import-goods-into-uk)")
                 elif color == 'orange':
                     st.warning(f"⚠️ **Action:** {advice}")
-                    st.info("💡 **Requirement:** Seal must be recorded on the General Certificate. Not for EU labeling must be applied to retail packaging.")
-                    # Direct Help for Hauliers
+                    st.info("💡 **Haulier Rule:** Seal must be recorded on the General Certificate.")
+                    
                     st.markdown("---")
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.link_button("📜 Download CHED-P Form", "https://www.gov.uk/guidance/import-of-products-animals-food-and-feed-system")
-                    with col2:
-                        st.link_button("📞 Contact DAERA Support", "https://www.daera-ni.gov.uk/contacts/vets-and-animal-health-contacts")
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        st.link_button("📜 NIRMS Login", "https://www.gov.uk/guidance/northern-ireland-retail-movement-scheme-how-to-register")
+                    with c2:
+                        st.link_button("📧 Email APHA", "mailto:NIRetailMovementEnquiries@apha.gov.uk")
                 else:
                     st.success(f"✅ **Action:** {advice}")
             
@@ -97,7 +107,7 @@ if st.sidebar.button("🚀 Run Compliance Check") and items:
         except:
             st.error(f"Connection error for {item}")
 
-    # 7. Audit & CSV Downloader
+    # 7. Audit Table & CSV Downloader
     if results:
         st.divider()
         st.subheader("📋 Audit Summary")
@@ -106,7 +116,7 @@ if st.sidebar.button("🚀 Run Compliance Check") and items:
         
         csv_data = df.to_csv(index=False).encode('utf-8')
         st.download_button(
-            label="📥 Download Audit Report for Manifest",
+            label="📥 Download Audit Report",
             data=csv_data,
             file_name='ni_trade_audit.csv',
             mime='text/csv',
