@@ -1,12 +1,11 @@
 import streamlit as st
 import requests
 import pandas as pd
-import time
 
 # 1. Page Config
 st.set_page_config(page_title="NI Trade Guard Pro", page_icon="🛡️", layout="wide")
 
-# 2. Reset Memory
+# 2. Permanent Memory (Session State)
 if 'results' not in st.session_state:
     st.session_state.results = []
 
@@ -32,9 +31,10 @@ with st.sidebar:
     st.header("🛡️ Resources")
     mode = st.radio("Input Mode:", ["Manual", "Bulk CSV"])
     st.divider()
-    if st.button("🗑️ Clear All Results"):
+    if st.button("🗑️ Clear Results"):
         st.session_state.results = []
         st.rerun()
+    st.write("**TSS:** 0800 060 8888")
 
 # 6. Input Logic
 input_list = []
@@ -45,62 +45,60 @@ else:
     file = st.sidebar.file_uploader("Upload CSV", type=["csv"])
     if file:
         df_in = pd.read_csv(file)
+        # Grab first column regardless of name
         input_list = df_in.iloc[:, 0].dropna().tolist()
 
-# 7. THE ENGINE (Now with Live Progress)
+# 7. THE ENGINE
 if st.sidebar.button("🚀 Run Compliance Check"):
     if not input_list:
-        st.sidebar.warning("No data to check.")
+        st.sidebar.warning("No data found.")
     else:
-        # 1. Start the Throbber
-        with st.status("🎡 Spinning the wheel... checking HMRC servers...", expanded=True) as status:
-            temp_results = []
-            progress_bar = st.progress(0)
-            
-            for index, item in enumerate(input_list):
-                # Calculate progress
-                pct = (index + 1) / len(input_list)
-                progress_bar.progress(pct)
+        # Step 1: Process everything into a temporary list
+        processed_data = []
+        with st.status("🎡 Spinning the wheel...", expanded=True) as status:
+            p_bar = st.progress(0)
+            for i, item in enumerate(input_list):
+                # Update progress
+                p_bar.progress((i + 1) / len(input_list))
                 
-                # Code mapping
+                # Logic
                 manual = {"beef":"0201", "cheese":"0406", "pork":"0203", "chicken":"0207", "steel":"7210"}
                 code = manual.get(str(item).lower()) or ''.join(filter(str.isdigit, str(item)))
                 
                 if not code: continue
 
                 try:
-                    res = requests.get(f"https://www.trade-tariff.service.gov.uk/xi/api/v2/headings/{code[:4]}", timeout=15)
+                    res = requests.get(f"https://www.trade-tariff.service.gov.uk/xi/api/v2/headings/{code[:4]}", timeout=10)
                     lane, advice, color = "Green Lane", "UKIMS Only", "green"
                     if res.status_code == 200:
                         raw = res.text.lower()
                         if code[:2] in ['72', '73']: lane, advice, color = "Category 1 (Red)", "Full Customs Dec", "red"
                         elif code[:2] in ['01','02','03','04','05'] or "veterinary" in raw:
                             lane, advice, color = "Category 2 (Orange)", "NIRMS: Health Cert Required", "orange"
-                    
-                    temp_results.append({"Product": item, "Code": code, "Lane": lane, "Advice": advice, "color": color})
+                    processed_data.append({"Product": item, "Lane": lane, "Advice": advice, "color": color})
                 except:
-                    temp_results.append({"Product": item, "Code": code, "Lane": "Error", "Advice": "HMRC Server Timeout", "color": "gray"})
+                    processed_data.append({"Product": item, "Lane": "Error", "Advice": "Timeout", "color": "gray"})
             
-            # 2. Finish
-            st.session_state.results = temp_results
-            status.update(label="🎰 Wheel stopped! Results ready.", state="complete", expanded=False)
+            # Step 2: Save to memory and close status
+            st.session_state.results = processed_data
+            status.update(label="🎰 Analysis Finished!", state="complete", expanded=False)
 
-# 8. RESULTS DISPLAY
+# 8. THE DISPLAY (This part is now OUTSIDE the button logic)
 if st.session_state.results:
     st.divider()
-    # Cards
+    # 1. Cards
     for r in st.session_state.results:
         with st.expander(f"{r['Product']} — {r['Lane']}", expanded=True):
             if r['color'] == 'red': st.error(f"🔴 {r['Advice']}")
             elif r['color'] == 'orange': st.warning(f"🟡 {r['Advice']}")
             else: st.success(f"🟢 {r['Advice']}")
 
-    # Table
+    # 2. Table
     st.divider()
     st.subheader("📋 Audit Summary")
     df_final = pd.DataFrame(st.session_state.results).drop(columns=['color'])
     st.table(df_final)
     
-    # Download
+    # 3. Download
     csv = df_final.to_csv(index=False).encode('utf-8')
     st.download_button("📥 Download Official Audit", csv, "audit.csv", "text/csv")
