@@ -3,9 +3,10 @@ import requests
 import pandas as pd
 import streamlit.components.v1 as components
 
+# 1. Page Config
 st.set_page_config(page_title="NI Trade Guard Pro", page_icon="🛡️", layout="wide")
 
-# --- 1. THE ULTIMATE PRINT & LOGO STYLE ---
+# 2. Advanced CSS (Animation + Forced Print Visibility)
 st.markdown("""
     <style>
         /* Logo Animation */
@@ -19,36 +20,33 @@ st.markdown("""
             0% { opacity: 0; } 10% { opacity: 1; } 30% { opacity: 1; } 40% { opacity: 0; } 100% { opacity: 0; }
         }
 
-        /* --- THE PRINT FIX --- */
+        /* --- THE NUCLEAR PRINT FIX --- */
         @media print {
-            /* Hide the sidebar, headers, and all buttons */
-            header, footer, .stSidebar, .stButton, [data-testid="stHeader"] {
+            /* 1. Hide everything unnecessary */
+            header, footer, section[data-testid="stSidebar"], .stButton, [data-testid="stHeader"], .stExpander {
                 display: none !important;
             }
-            /* Force the main container to be visible */
-            .main, .block-container {
-                display: block !important;
-                visibility: visible !important;
-                padding: 0 !important;
-                margin: 0 !important;
-            }
-            /* Style the table for paper */
-            table { 
-                width: 100% !important; 
-                border: 1px solid #000 !important; 
-                color: black !important;
-            }
-            th, td { 
-                border: 1px solid #666 !important; 
-                padding: 10px !important; 
+            
+            /* 2. Force the background to be white and text to be black */
+            .main, .block-container, body, h1, h2, h3, p, span {
                 background-color: white !important;
                 color: black !important;
+                visibility: visible !important;
             }
+
+            /* 3. Make the table high-contrast for paper */
+            table { 
+                width: 100% !important; 
+                border: 2px solid black !important; 
+                border-collapse: collapse !important;
+            }
+            th { background-color: #f2f2f2 !important; color: black !important; border: 1px solid black !important; }
+            td { border: 1px solid black !important; color: black !important; background-color: white !important; }
         }
     </style>
 """, unsafe_allow_html=True)
 
-# Header
+# 3. Header
 st.markdown("""
     <div class="main-title">
         <div class="logo-container">
@@ -61,15 +59,15 @@ st.markdown("""
     <p style="color: gray; font-size: 1.1rem; margin-top: -10px;">Official Compliance & Audit Report</p>
 """, unsafe_allow_html=True)
 
-# Sidebar
+# 4. Sidebar Controls
 with st.sidebar:
     st.header("Controls")
-    mode = st.radio("Input:", ["Manual", "Bulk CSV"])
+    mode = st.radio("Input Method:", ["Manual", "Bulk CSV"])
     st.divider()
     # Simple Print Button
     components.html('<button onclick="window.print()" style="width:100%; border-radius:8px; background-color:#FF4B4B; color:white; border:none; padding:12px; font-weight:bold; cursor:pointer;">📄 Generate Audit PDF</button>', height=70)
 
-# Input
+# 5. Input Logic
 items = []
 if mode == "Manual":
     txt = st.sidebar.text_area("List Items:", "beef\n0203\n7210")
@@ -78,7 +76,7 @@ else:
     f = st.sidebar.file_uploader("Upload CSV", type=["csv"])
     if f: items = pd.read_csv(f).iloc[:, 0].tolist()
 
-# The Run Logic
+# 6. Compliance Engine
 if st.sidebar.button("🚀 Analyze Shipment") and items:
     results = []
     for item in items:
@@ -87,24 +85,27 @@ if st.sidebar.button("🚀 Analyze Shipment") and items:
         code = manual.get(str(item).lower()) or ''.join(filter(str.isdigit, str(item)))
         if not code: continue
 
-        res = requests.get(f"https://www.trade-tariff.service.gov.uk/xi/api/v2/headings/{code[:4]}")
-        lane, advice = "Green Lane", "UKIMS Only"
+        res = requests.get(f"https://www.trade-tariff.service.gov.uk/xi/api/v2/headings/{code[:4]}", timeout=5)
+        lane, advice, color = "Green Lane", "UKIMS Only", "green"
         
         if res.status_code == 200:
             raw = str(res.json()).lower()
-            if code[:2] in ['72', '73']: lane, advice = "Category 1 (Red)", "Full Customs Dec"
+            if code[:2] in ['72', '73']: 
+                lane, advice, color = "Category 1 (Red)", "Full Customs Dec", "red"
             elif code[:2] in ['01','02','03','04','05'] or "veterinary" in raw:
-                lane, advice = "Category 2 (Orange)", "NIRMS Health Cert"
+                lane, advice, color = "Category 2 (Orange)", "NIRMS Health Cert", "orange"
 
-        results.append({"Product": item, "Code": code, "Result": lane, "Action": advice})
+        results.append({"Product": item, "Code": code, "Result": lane, "Action": advice, "color": color})
 
-    # Results Expanders
+    # Results Expanders (Screen Only)
     for r in results:
-        with st.expander(f"{r['Product']} — {r['Result']}"):
-            st.write(f"**Required Action:** {r['Action']}")
+        with st.expander(f"{r['Product']} — {r['Result']}", expanded=True):
+            if r['color'] == 'red': st.error(f"🔴 {r['Action']}")
+            elif r['color'] == 'orange': st.warning(f"🟡 {r['Action']}")
+            else: st.success(f"🟢 {r['Action']}")
 
-    # --- THE AUDIT TABLE (PDF TARGET) ---
+    # --- 7. THE AUDIT TABLE (PDF TARGET) ---
     st.divider()
     st.subheader("📋 Shipment Audit Report")
-    # Using the static table again as it's the safest for PDF
-    st.table(pd.DataFrame(results))
+    # Using st.table() because it prints much more reliably than the interactive dataframe
+    st.table(pd.DataFrame(results).drop(columns=['color']))
