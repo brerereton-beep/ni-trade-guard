@@ -9,6 +9,7 @@ st.set_page_config(page_title="NI Trade Guard Pro", page_icon="🛡️", layout=
 
 # 2. Header
 st.markdown("<h1 style='text-align: center;'>🛡️ NI Trade Guard Pro</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: gray;'>Windsor Framework Compliance Decision Support</p>", unsafe_allow_html=True)
 
 # 3. Sidebar
 with st.sidebar:
@@ -22,13 +23,14 @@ with st.sidebar:
 # 4. Input Handling
 final_list = []
 if mode == "Manual":
-    raw_text = st.sidebar.text_area("List Products:", "beef\n0203\npizza\n7210\ntimber")
+    raw_text = st.sidebar.text_area("List Products:", "beef\n0203\npizza\n7210\npallets\nsensor")
     if raw_text:
         final_list = [i.strip() for i in raw_text.split('\n') if i.strip()]
 else:
     file = st.sidebar.file_uploader("Upload CSV", type=["csv"])
     if file:
         df = pd.read_csv(file)
+        # Assumes the first column contains the product description or code
         final_list = df.iloc[:, 0].dropna().tolist()
 
 # 5. THE ENGINE
@@ -37,8 +39,8 @@ if st.sidebar.button("🚀 Run Compliance Check"):
         st.error("⚠️ No items found.")
     else:
         results = []
-        with st.spinner('🎡 Spinning the wheel... checking Chapters, Keywords, and Dual-Use lists...'):
-            # Timezone Setup
+        with st.spinner('🎡 Checking Chapters, Keywords, and Dual-Use lists...'):
+            # --- Timezone Setup ---
             try:
                 tz = pytz.timezone('Europe/London')
                 timestamp = datetime.now(tz).strftime("%Y-%m-%d %H:%M")
@@ -50,27 +52,28 @@ if st.sidebar.button("🚀 Run Compliance Check"):
                 digits = ''.join(filter(str.isdigit, item_str))
                 chapter = digits[:2] if len(digits) >= 2 else ""
                 
-                # Default
+                # Default Setup
                 lane, advice, color = "Green Lane", "UKIMS Only", "green"
                 
                 # --- RULE 1: CATEGORY 1 (RED) - INDUSTRIAL & DUAL-USE ---
-                # Chapters 72-73 (Steel), 76 (Alu), 28-29 (Chem), 84-85 (Tech/Machinery)
-                red_chapters = ["72", "73", "76", "28", "29", "84", "85"]
-                red_keywords = ["steel", "aluminum", "iron", "chemical", "precision", "sensor", "drone", "military"]
+                # Focus: Steel, Aluminum, Chemicals, and Tech
+                red_chapters = ["72", "73", "76", "28", "29", "84", "85", "90"]
+                red_keywords = ["steel", "aluminum", "iron", "chemical", "precision", "sensor", "drone", "military", "ballistic"]
                 
                 if chapter in red_chapters or any(x in item_str for x in red_keywords):
                     lane, advice, color = "Category 1 (Red)", "Full Customs Declaration / License Check Required", "red"
                 
-                # --- RULE 2: CATEGORY 2 (ORANGE) - SPS & COMPOSITE ---
-                # Chapters 01-16 (SPS), 19-21 (Composite/Prepared Food), 44 (Timber)
+                # --- RULE 2: CATEGORY 2 (ORANGE) - SPS, COMPOSITE, & PACKAGING ---
+                # Focus: Meat, Fish, Dairy, Veg, Prepared Meals, and Wood Packaging
                 orange_chapters = ["01", "02", "03", "04", "05", "07", "08", "09", "10", "12", "16", "19", "21", "44"]
                 orange_keywords = [
                     "beef", "pork", "chicken", "lamb", "mutton", "venison", "poultry", "meat", 
                     "cheese", "dairy", "fish", "prawn", "seafood", "milk", "fruit", "veg", 
                     "sausage", "bacon", "ham", "pizza", "lasagna", "ready meal", "pasta", 
-                    "timber", "wood", "logs", "plant", "flower"
+                    "timber", "wood", "logs", "plant", "flower", "pallet", "crate", "box"
                 ]
                 
+                # Only flag Orange if it wasn't already flagged Red
                 if (chapter in orange_chapters or any(x in item_str for x in orange_keywords)) and color != "red":
                     lane, advice, color = "Category 2 (Orange)", "NIRMS: Health Cert (CHED) + 'Not for EU' Label", "orange"
 
@@ -79,7 +82,8 @@ if st.sidebar.button("🚀 Run Compliance Check"):
                     lane, advice, color = "Category 2 (Orange)", "Excise Controls: Duty & Movement rules apply", "orange"
 
                 # --- RULE 4: API SEARCH (The Safety Net) ---
-                elif digits:
+                # If no keywords matched, check HMRC database for regulatory footnotes
+                elif digits and color == "green":
                     try:
                         res = requests.get(f"https://www.trade-tariff.service.gov.uk/xi/api/v2/headings/{digits[:4]}", timeout=5)
                         if res.status_code == 200:
@@ -109,8 +113,11 @@ if st.sidebar.button("🚀 Run Compliance Check"):
             st.divider()
             st.subheader("📋 Shipment Audit Summary")
             df_final = pd.DataFrame(results).drop(columns=['color'])
+            
+            # Display summary table
             st.table(df_final)
             
+            # Prepare CSV download
             csv_file = df_final.to_csv(index=False).encode('utf-8')
             st.download_button(
                 label="📥 Download Official Audit Report",
