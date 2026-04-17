@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 from datetime import datetime
-import pytz  # This is the library that handles timezones
+import pytz 
 
 # 1. Page Config
 st.set_page_config(page_title="NI Trade Guard Pro", page_icon="🛡️", layout="wide")
@@ -10,7 +10,7 @@ st.set_page_config(page_title="NI Trade Guard Pro", page_icon="🛡️", layout=
 # 2. Header
 st.markdown("<h1 style='text-align: center;'>🛡️ NI Trade Guard Pro</h1>", unsafe_allow_html=True)
 
-# 3. Sidebar Resources
+# 3. Sidebar
 with st.sidebar:
     st.header("Shipment Input")
     mode = st.radio("Input Mode:", ["Manual", "Bulk CSV"])
@@ -37,26 +37,47 @@ if st.sidebar.button("🚀 Run Compliance Check"):
         st.error("⚠️ No items found.")
     else:
         results = []
-        with st.spinner('🔍 Verifying shipment compliance...'):
-            # --- FIX: Explicitly set to London/Belfast time ---
-            tz = pytz.timezone('Europe/London')
-            timestamp = datetime.now(tz).strftime("%Y-%m-%d %H:%M")
+        with st.spinner('🎡 Spinning the wheel... checking Chapter Ranges and HMRC rules...'):
+            # Timezone Setup
+            try:
+                tz = pytz.timezone('Europe/London')
+                timestamp = datetime.now(tz).strftime("%Y-%m-%d %H:%M")
+            except:
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
             
             for item in final_list:
                 item_str = str(item).lower()
+                # Extract first 2 digits (The Chapter)
                 digits = ''.join(filter(str.isdigit, item_str))
+                chapter = digits[:2] if len(digits) >= 2 else ""
                 
+                # Default Setup
                 lane, advice, color = "Green Lane", "UKIMS Only", "green"
                 
-                if any(x in item_str for x in ["steel", "72", "73", "aluminum", "76", "iron"]):
+                # --- RULE 1: CATEGORY 1 (RED) - INDUSTRIAL CONTROLS ---
+                # Chapters 72-73 (Steel/Iron), 76 (Aluminum), 28-29 (Chemicals)
+                if chapter in ["72", "73", "76", "28", "29"] or any(x in item_str for x in ["steel", "aluminum", "iron", "chemical"]):
                     lane, advice, color = "Category 1 (Red)", "Full Customs Declaration Required", "red"
-                elif any(x in item_str for x in ["beef", "pork", "chicken", "meat", "cheese", "dairy", "020", "040", "milk"]):
+                
+                # --- RULE 2: CATEGORY 2 (ORANGE) - SPS / VETERINARY ---
+                # Chapters 01-05 (Animals/Meat/Fish), 07-12 (Veg/Fruit/Plants), 16 (Processed Meat/Fish)
+                elif chapter in ["01", "02", "03", "04", "05", "07", "08", "09", "10", "12", "16"] or \
+                     any(x in item_str for x in ["beef", "pork", "chicken", "meat", "cheese", "dairy", "fish", "prawn", "seafood", "milk", "fruit", "veg"]):
                     lane, advice, color = "Category 2 (Orange)", "NIRMS: Health Cert (CHED-P) + 'Not for EU' Label", "orange"
+
+                # --- RULE 3: EXCISE (ORANGE) ---
+                # Chapter 22 (Alcohol/Drinks)
+                elif chapter == "22" or "alcohol" in item_str:
+                    lane, advice, color = "Category 2 (Orange)", "Excise Controls: Duty & Movement rules apply", "orange"
+
+                # --- RULE 4: API SEARCH (The Safety Net) ---
                 elif digits:
                     try:
                         res = requests.get(f"https://www.trade-tariff.service.gov.uk/xi/api/v2/headings/{digits[:4]}", timeout=5)
-                        if res.status_code == 200 and ("veterinary" in res.text.lower()):
-                            lane, advice, color = "Category 2 (Orange)", "NIRMS: Health Cert Required", "orange"
+                        if res.status_code == 200:
+                            raw = res.text.lower()
+                            if "veterinary" in raw or "animal health" in raw:
+                                lane, advice, color = "Category 2 (Orange)", "NIRMS: Health Cert Required", "orange"
                     except:
                         pass
 
@@ -82,12 +103,10 @@ if st.sidebar.button("🚀 Run Compliance Check"):
             df_final = pd.DataFrame(results).drop(columns=['color'])
             st.table(df_final)
             
-            # Download with Corrected Filename Timestamp
-            fn_time = datetime.now(tz).strftime('%Y%m%d_%H%M')
             csv_file = df_final.to_csv(index=False).encode('utf-8')
             st.download_button(
                 label="📥 Download Official Audit Report",
                 data=csv_file,
-                file_name=f"NI_Audit_{fn_time}.csv",
+                file_name=f"NI_Audit_{timestamp.replace(' ','_').replace(':','')}.csv",
                 mime="text/csv"
             )
