@@ -8,14 +8,13 @@ st.set_page_config(page_title="NI Trade Guard Pro", page_icon="🛡️", layout=
 
 # 2. Header
 st.markdown("<h1 style='text-align: center;'>🛡️ NI Trade Guard Pro</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: gray;'>Windsor Framework Compliance Decision Support</p>", unsafe_allow_html=True)
 
 # 3. Sidebar Resources
 with st.sidebar:
     st.header("Shipment Input")
     mode = st.radio("Input Mode:", ["Manual", "Bulk CSV"])
     st.divider()
-    st.subheader("📞 Official Helplines")
+    st.subheader("📞 Helplines")
     st.write("**TSS:** 0800 060 8888")
     st.write("**DAERA:** 0300 200 7840")
 
@@ -37,13 +36,14 @@ if st.sidebar.button("🚀 Run Compliance Check"):
         st.error("⚠️ No items found.")
     else:
         results = []
-        # THE THROBBER
-        with st.spinner('🎡 Spinning the wheel... cross-referencing Windsor Framework rules...'):
+        with st.spinner('🔍 Verifying shipment compliance...'):
+            # Grab current time for the audit trail
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+            
             for item in final_list:
                 item_str = str(item).lower()
                 digits = ''.join(filter(str.isdigit, item_str))
                 
-                # Default
                 lane, advice, color = "Green Lane", "UKIMS Only", "green"
                 
                 # Priority 1: Category 1 (RED)
@@ -54,18 +54,22 @@ if st.sidebar.button("🚀 Run Compliance Check"):
                 elif any(x in item_str for x in ["beef", "pork", "chicken", "meat", "cheese", "dairy", "020", "040", "milk"]):
                     lane, advice, color = "Category 2 (Orange)", "NIRMS: Health Cert (CHED-P) + 'Not for EU' Label", "orange"
 
-                # Priority 3: API Check for everything else
+                # Priority 3: API Check
                 elif digits:
                     try:
                         res = requests.get(f"https://www.trade-tariff.service.gov.uk/xi/api/v2/headings/{digits[:4]}", timeout=5)
-                        if res.status_code == 200:
-                            raw = res.text.lower()
-                            if "veterinary" in raw or "animal" in raw:
-                                lane, advice, color = "Category 2 (Orange)", "NIRMS: Health Cert Required", "orange"
+                        if res.status_code == 200 and ("veterinary" in res.text.lower()):
+                            lane, advice, color = "Category 2 (Orange)", "NIRMS: Health Cert Required", "orange"
                     except:
                         pass
 
-                results.append({"Product": item, "Lane": lane, "Action": advice, "color": color})
+                results.append({
+                    "Date Verified": timestamp, # INJECTED COLUMN
+                    "Product": item, 
+                    "Lane": lane, 
+                    "Action": advice, 
+                    "color": color
+                })
 
         # 6. DISPLAY RESULTS
         st.divider()
@@ -78,15 +82,13 @@ if st.sidebar.button("🚀 Run Compliance Check"):
         if results:
             st.divider()
             st.subheader("📋 Shipment Audit Summary")
+            # Drop color for the display table
             df_final = pd.DataFrame(results).drop(columns=['color'])
             
-            # Add Timestamp for professional record keeping
-            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            st.caption(f"Audit generated on: {current_time}")
-            
+            # Show table
             st.table(df_final)
             
-            # Professional Download Button
+            # Download
             csv_file = df_final.to_csv(index=False).encode('utf-8')
             st.download_button(
                 label="📥 Download Official Audit Report",
