@@ -1,0 +1,29 @@
+PROPRIETARY LICENSE - NI TRADE GUARD PRO
+
+Copyright (c) 2026 Richard Brereton
+All Rights Reserved.
+
+1. OWNERSHIP
+The software "NI Trade Guard Pro", including all source code, logic, 
+chapter-mapping algorithms, and keyword databases, is the exclusive 
+intellectual property of [Your Full Name].
+
+2. RESTRICTIONS ON USE
+No part of this software may be copied, modified, redistributed, 
+relicensed, or sold without the express written permission of the owner. 
+Users are strictly prohibited from:
+   - Attempting to decompile or reverse-engineer the software.
+   - Accessing the underlying source code for the purpose of 
+     reproducing the trade-category logic.
+   - Sharing the private repository access with unauthorized parties.
+
+3. DISCLAIMER OF WARRANTY
+This software is provided "as is" for decision-support purposes only. 
+The owner makes no guarantees regarding the legal accuracy of trade 
+classifications and shall not be held liable for any customs penalties, 
+fees, or shipping delays resulting from its use. Final compliance 
+responsibility remains with the user.
+
+4. TERMINATION
+The owner reserves the right to terminate access to the software at 
+any time if these terms are breached.
