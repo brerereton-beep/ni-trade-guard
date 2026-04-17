@@ -1,15 +1,13 @@
 import streamlit as st
 import requests
 import pandas as pd
-import streamlit.components.v1 as components
 
 # 1. Page Config
 st.set_page_config(page_title="NI Trade Guard Pro", page_icon="🛡️", layout="wide")
 
-# 2. Advanced CSS (Animation + Forced Print Visibility)
+# 2. Animation Styling
 st.markdown("""
     <style>
-        /* Logo Animation */
         .main-title { font-size: 2.5rem; font-weight: 700; display: flex; align-items: center; gap: 15px; }
         .logo-container { position: relative; width: 60px; height: 60px; }
         .logo-icon { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; font-size: 50px; text-align: center; animation: logoFade 9s infinite; }
@@ -17,31 +15,11 @@ st.markdown("""
         .logo-icon:nth-child(2) { animation-delay: 3s; } 
         .logo-icon:nth-child(3) { animation-delay: 6s; }
         @keyframes logoFade {
-            0% { opacity: 0; } 10% { opacity: 1; } 30% { opacity: 1; } 40% { opacity: 0; } 100% { opacity: 0; }
-        }
-
-        /* --- THE NUCLEAR PRINT FIX --- */
-        @media print {
-            /* 1. Hide everything unnecessary */
-            header, footer, section[data-testid="stSidebar"], .stButton, [data-testid="stHeader"], .stExpander {
-                display: none !important;
-            }
-            
-            /* 2. Force the background to be white and text to be black */
-            .main, .block-container, body, h1, h2, h3, p, span {
-                background-color: white !important;
-                color: black !important;
-                visibility: visible !important;
-            }
-
-            /* 3. Make the table high-contrast for paper */
-            table { 
-                width: 100% !important; 
-                border: 2px solid black !important; 
-                border-collapse: collapse !important;
-            }
-            th { background-color: #f2f2f2 !important; color: black !important; border: 1px solid black !important; }
-            td { border: 1px solid black !important; color: black !important; background-color: white !important; }
+            0% { opacity: 0; transform: translateY(5px); }
+            10% { opacity: 1; transform: translateY(0); }
+            30% { opacity: 1; }
+            40% { opacity: 0; transform: translateY(-5px); }
+            100% { opacity: 0; }
         }
     </style>
 """, unsafe_allow_html=True)
@@ -56,56 +34,77 @@ st.markdown("""
         </div>
         <span>NI Trade Guard Pro</span>
     </div>
-    <p style="color: gray; font-size: 1.1rem; margin-top: -10px;">Official Compliance & Audit Report</p>
+    <p style="color: gray; font-size: 1.1rem; margin-top: -10px; margin-bottom: 20px;">Official Compliance & NIRMS Audit Tool</p>
 """, unsafe_allow_html=True)
 
 # 4. Sidebar Controls
 with st.sidebar:
-    st.header("Controls")
-    mode = st.radio("Input Method:", ["Manual", "Bulk CSV"])
+    st.header("Shipment Input")
+    mode = st.radio("Mode:", ["Manual Entry", "Bulk CSV"])
     st.divider()
-    # Simple Print Button
-    components.html('<button onclick="window.print()" style="width:100%; border-radius:8px; background-color:#FF4B4B; color:white; border:none; padding:12px; font-weight:bold; cursor:pointer;">📄 Generate Audit PDF</button>', height=70)
+    st.info("💡 Tip: Use the 'Manual Entry' for quick single-item checks.")
 
 # 5. Input Logic
 items = []
-if mode == "Manual":
-    txt = st.sidebar.text_area("List Items:", "beef\n0203\n7210")
+if mode == "Manual Entry":
+    txt = st.sidebar.text_area("List Products:", "beef\n0203\n7210")
     items = [i.strip() for i in txt.split('\n') if i.strip()]
 else:
     f = st.sidebar.file_uploader("Upload CSV", type=["csv"])
     if f: items = pd.read_csv(f).iloc[:, 0].tolist()
 
 # 6. Compliance Engine
-if st.sidebar.button("🚀 Analyze Shipment") and items:
+if st.sidebar.button("🚀 Run Compliance Check") and items:
     results = []
+    st.divider()
+    st.subheader("Analysis Results")
+    
     for item in items:
-        # Mini-Dictionary for test
-        manual = {"beef":"0201", "cheese":"0406", "pork":"0203", "chicken":"0207"}
+        # Mini-mapping for common terms
+        manual = {"beef":"0201", "cheese":"0406", "pork":"0203", "chicken":"0207", "steel":"7210"}
         code = manual.get(str(item).lower()) or ''.join(filter(str.isdigit, str(item)))
+        
         if not code: continue
 
-        res = requests.get(f"https://www.trade-tariff.service.gov.uk/xi/api/v2/headings/{code[:4]}", timeout=5)
-        lane, advice, color = "Green Lane", "UKIMS Only", "green"
+        # API Call
+        try:
+            res = requests.get(f"https://www.trade-tariff.service.gov.uk/xi/api/v2/headings/{code[:4]}", timeout=5)
+            lane, advice, color = "Green Lane", "UKIMS Only", "green"
+            
+            if res.status_code == 200:
+                raw = str(res.json()).lower()
+                if code[:2] in ['72', '73']: 
+                    lane, advice, color = "Category 1 (Red)", "Full Customs Declaration Required", "red"
+                elif code[:2] in ['01','02','03','04','05'] or "veterinary" in raw:
+                    lane, advice, color = "Category 2 (Orange)", "NIRMS: Health Cert (CHED-P) + 'Not for EU' Labels", "orange"
+
+            # Display immediately under product
+            with st.expander(f"{item} — {lane}", expanded=True):
+                if color == 'red':
+                    st.error(f"🚨 **Action:** {advice}")
+                elif color == 'orange':
+                    st.warning(f"⚠️ **Action:** {advice}")
+                    st.info("💡 **Requirement:** Seal must be recorded on the General Certificate.")
+                else:
+                    st.success(f"✅ **Action:** {advice}")
+            
+            results.append({"Product": item, "Code": code, "Lane": lane, "Advice": advice})
         
-        if res.status_code == 200:
-            raw = str(res.json()).lower()
-            if code[:2] in ['72', '73']: 
-                lane, advice, color = "Category 1 (Red)", "Full Customs Dec", "red"
-            elif code[:2] in ['01','02','03','04','05'] or "veterinary" in raw:
-                lane, advice, color = "Category 2 (Orange)", "NIRMS Health Cert", "orange"
+        except:
+            st.error(f"Connection error for {item}")
 
-        results.append({"Product": item, "Code": code, "Result": lane, "Action": advice, "color": color})
-
-    # Results Expanders (Screen Only)
-    for r in results:
-        with st.expander(f"{r['Product']} — {r['Result']}", expanded=True):
-            if r['color'] == 'red': st.error(f"🔴 {r['Action']}")
-            elif r['color'] == 'orange': st.warning(f"🟡 {r['Action']}")
-            else: st.success(f"🟢 {r['Action']}")
-
-    # --- 7. THE AUDIT TABLE (PDF TARGET) ---
-    st.divider()
-    st.subheader("📋 Shipment Audit Report")
-    # Using st.table() because it prints much more reliably than the interactive dataframe
-    st.table(pd.DataFrame(results).drop(columns=['color']))
+    # 7. Audit Table & CSV Downloader
+    if results:
+        st.divider()
+        st.subheader("📋 Audit Summary")
+        df = pd.DataFrame(results)
+        st.dataframe(df, use_container_width=True, hide_index=True)
+        
+        # CSV Downloader
+        csv_data = df.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="📥 Download Audit Report",
+            data=csv_data,
+            file_name='ni_trade_audit.csv',
+            mime='text/csv',
+        )
