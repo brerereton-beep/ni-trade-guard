@@ -1,15 +1,16 @@
 import streamlit as st
 import requests
 import pandas as pd
+import time
 
 # 1. Page Config
 st.set_page_config(page_title="NI Trade Guard Pro", page_icon="🛡️", layout="wide")
 
-# 2. Reset Memory on Start
+# 2. Reset Memory
 if 'results' not in st.session_state:
-    st.session_state.results = None
+    st.session_state.results = []
 
-# 3. Logo Styling
+# 3. Logo & Styling
 st.markdown("""
     <style>
         .header-unit { text-align: center; margin-bottom: 20px; }
@@ -26,48 +27,50 @@ st.markdown("""
 # 4. Header
 st.markdown("""<div class="header-unit"><div class="logo-box"><div class="logo-item">🛳️</div><div class="logo-item">✈️</div><div class="logo-item">🚛</div></div><div class="clean-title">NI Trade Guard Pro</div></div>""", unsafe_allow_html=True)
 
-# 5. Sidebar Resources
+# 5. Sidebar
 with st.sidebar:
     st.header("🛡️ Resources")
     mode = st.radio("Input Mode:", ["Manual", "Bulk CSV"])
     st.divider()
-    st.write("**TSS Support:** 0800 060 8888")
-    st.write("**DAERA NI:** 0300 200 7840")
+    if st.button("🗑️ Clear All Results"):
+        st.session_state.results = []
+        st.rerun()
 
-# 6. Input Handling
-final_list = []
+# 6. Input Logic
+input_list = []
 if mode == "Manual":
-    raw_text = st.sidebar.text_area("List Products:", "beef\n0203\n7210")
-    if raw_text:
-        final_list = [i.strip() for i in raw_text.split('\n') if i.strip()]
+    raw = st.sidebar.text_area("List Products:", "beef\n0203\n7210")
+    if raw: input_list = [i.strip() for i in raw.split('\n') if i.strip()]
 else:
     file = st.sidebar.file_uploader("Upload CSV", type=["csv"])
     if file:
-        df_csv = pd.read_csv(file)
-        final_list = df_csv.iloc[:, 0].dropna().tolist()
+        df_in = pd.read_csv(file)
+        input_list = df_in.iloc[:, 0].dropna().tolist()
 
-# 7. THE ENGINE
+# 7. THE ENGINE (Now with Live Progress)
 if st.sidebar.button("🚀 Run Compliance Check"):
-    if not final_list:
-        st.sidebar.warning("⚠️ No data found to analyze.")
+    if not input_list:
+        st.sidebar.warning("No data to check.")
     else:
-        # This forces the spinner to show up immediately
-        with st.spinner('🎡 Spinning the compliance wheel... checking HMRC...'):
+        # 1. Start the Throbber
+        with st.status("🎡 Spinning the wheel... checking HMRC servers...", expanded=True) as status:
             temp_results = []
-            for item in final_list:
-                # Basic code lookup
+            progress_bar = st.progress(0)
+            
+            for index, item in enumerate(input_list):
+                # Calculate progress
+                pct = (index + 1) / len(input_list)
+                progress_bar.progress(pct)
+                
+                # Code mapping
                 manual = {"beef":"0201", "cheese":"0406", "pork":"0203", "chicken":"0207", "steel":"7210"}
                 code = manual.get(str(item).lower()) or ''.join(filter(str.isdigit, str(item)))
                 
                 if not code: continue
 
                 try:
-                    # Fresh API Request
-                    url = f"https://www.trade-tariff.service.gov.uk/xi/api/v2/headings/{code[:4]}"
-                    res = requests.get(url, timeout=10)
-                    
+                    res = requests.get(f"https://www.trade-tariff.service.gov.uk/xi/api/v2/headings/{code[:4]}", timeout=15)
                     lane, advice, color = "Green Lane", "UKIMS Only", "green"
-                    
                     if res.status_code == 200:
                         raw = res.text.lower()
                         if code[:2] in ['72', '73']: lane, advice, color = "Category 1 (Red)", "Full Customs Dec", "red"
@@ -76,29 +79,28 @@ if st.sidebar.button("🚀 Run Compliance Check"):
                     
                     temp_results.append({"Product": item, "Code": code, "Lane": lane, "Advice": advice, "color": color})
                 except:
-                    temp_results.append({"Product": item, "Code": code, "Lane": "Error", "Advice": "Connection Issue", "color": "gray"})
+                    temp_results.append({"Product": item, "Code": code, "Lane": "Error", "Advice": "HMRC Server Timeout", "color": "gray"})
             
-            # Save results to memory
+            # 2. Finish
             st.session_state.results = temp_results
+            status.update(label="🎰 Wheel stopped! Results ready.", state="complete", expanded=False)
 
-# 8. RESULTS DISPLAY (Drawn outside the button)
+# 8. RESULTS DISPLAY
 if st.session_state.results:
-    st.success("🎰 The wheel has stopped!")
     st.divider()
-    
-    # Show Cards
+    # Cards
     for r in st.session_state.results:
         with st.expander(f"{r['Product']} — {r['Lane']}", expanded=True):
             if r['color'] == 'red': st.error(f"🔴 {r['Advice']}")
             elif r['color'] == 'orange': st.warning(f"🟡 {r['Advice']}")
             else: st.success(f"🟢 {r['Advice']}")
 
-    # Show Final Audit Table
+    # Table
     st.divider()
     st.subheader("📋 Audit Summary")
     df_final = pd.DataFrame(st.session_state.results).drop(columns=['color'])
     st.table(df_final)
     
-    # Download Link
-    csv_bytes = df_final.to_csv(index=False).encode('utf-8')
-    st.download_button("📥 Download Official Audit", csv_bytes, "audit.csv", "text/csv")
+    # Download
+    csv = df_final.to_csv(index=False).encode('utf-8')
+    st.download_button("📥 Download Official Audit", csv, "audit.csv", "text/csv")
