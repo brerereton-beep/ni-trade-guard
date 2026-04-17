@@ -5,36 +5,78 @@ import pandas as pd
 # 1. Page Config
 st.set_page_config(page_title="NI Trade Guard Pro", page_icon="🛡️", layout="wide")
 
-# 2. Animation Styling
+# 2. Centered & Stacked Logo Styling
 st.markdown("""
     <style>
-        .main-title { font-size: 2.5rem; font-weight: 700; display: flex; align-items: center; gap: 15px; }
-        .logo-container { position: relative; width: 60px; height: 60px; }
-        .logo-icon { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; font-size: 50px; text-align: center; animation: logoFade 9s infinite; }
+        /* Container to stack logo on top of text */
+        .header-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            width: 100%;
+            margin-bottom: 20px;
+        }
+
+        /* The Animation Box */
+        .logo-container { 
+            position: relative; 
+            width: 80px; 
+            height: 80px; 
+            margin-bottom: 10px;
+        }
+
+        /* Icons */
+        .logo-icon { 
+            position: absolute; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%; 
+            opacity: 0; 
+            font-size: 60px; 
+            animation: logoFade 9s infinite; 
+        }
+
         .logo-icon:nth-child(1) { animation-delay: 0s; } 
         .logo-icon:nth-child(2) { animation-delay: 3s; } 
         .logo-icon:nth-child(3) { animation-delay: 6s; }
+
         @keyframes logoFade {
-            0% { opacity: 0; transform: translateY(5px); }
-            10% { opacity: 1; transform: translateY(0); }
+            0% { opacity: 0; transform: scale(0.8); }
+            10% { opacity: 1; transform: scale(1); }
             30% { opacity: 1; }
-            40% { opacity: 0; transform: translateY(-5px); }
+            40% { opacity: 0; transform: scale(1.1); }
             100% { opacity: 0; }
+        }
+
+        .main-title { 
+            font-size: 2.2rem; 
+            font-weight: 700; 
+            margin: 0;
+            line-height: 1.2;
+        }
+        
+        .main-subtitle {
+            color: gray;
+            font-size: 1rem;
+            margin-top: 5px;
         }
     </style>
 """, unsafe_allow_html=True)
 
-# 3. Header
+# 3. Render Stacked Header
 st.markdown("""
-    <div class="main-title">
+    <div class="header-container">
         <div class="logo-container">
             <div class="logo-icon">🛳️</div>
             <div class="logo-icon">✈️</div>
             <div class="logo-icon">🚛</div>
         </div>
-        <span>NI Trade Guard Pro</span>
+        <div class="main-title">NI Trade Guard Pro</div>
+        <div class="main-subtitle">Official Compliance & NIRMS Audit Tool</div>
     </div>
-    <p style="color: gray; font-size: 1.1rem; margin-top: -10px; margin-bottom: 20px;">Official Compliance & NIRMS Audit Tool</p>
 """, unsafe_allow_html=True)
 
 # 4. Sidebar Controls
@@ -42,7 +84,6 @@ with st.sidebar:
     st.header("Shipment Input")
     mode = st.radio("Mode:", ["Manual Entry", "Bulk CSV"])
     st.divider()
-    st.info("💡 Tip: Use the 'Manual Entry' for quick single-item checks.")
 
 # 5. Input Logic
 items = []
@@ -57,16 +98,13 @@ else:
 if st.sidebar.button("🚀 Run Compliance Check") and items:
     results = []
     st.divider()
-    st.subheader("Analysis Results")
     
     for item in items:
-        # Mini-mapping for common terms
         manual = {"beef":"0201", "cheese":"0406", "pork":"0203", "chicken":"0207", "steel":"7210"}
         code = manual.get(str(item).lower()) or ''.join(filter(str.isdigit, str(item)))
         
         if not code: continue
 
-        # API Call
         try:
             res = requests.get(f"https://www.trade-tariff.service.gov.uk/xi/api/v2/headings/{code[:4]}", timeout=5)
             lane, advice, color = "Green Lane", "UKIMS Only", "green"
@@ -78,7 +116,7 @@ if st.sidebar.button("🚀 Run Compliance Check") and items:
                 elif code[:2] in ['01','02','03','04','05'] or "veterinary" in raw:
                     lane, advice, color = "Category 2 (Orange)", "NIRMS: Health Cert (CHED-P) + 'Not for EU' Labels", "orange"
 
-            # Display immediately under product
+            # Results directly under product
             with st.expander(f"{item} — {lane}", expanded=True):
                 if color == 'red':
                     st.error(f"🚨 **Action:** {advice}")
@@ -89,7 +127,6 @@ if st.sidebar.button("🚀 Run Compliance Check") and items:
                     st.success(f"✅ **Action:** {advice}")
             
             results.append({"Product": item, "Code": code, "Lane": lane, "Advice": advice})
-        
         except:
             st.error(f"Connection error for {item}")
 
@@ -100,7 +137,6 @@ if st.sidebar.button("🚀 Run Compliance Check") and items:
         df = pd.DataFrame(results)
         st.dataframe(df, use_container_width=True, hide_index=True)
         
-        # CSV Downloader
         csv_data = df.to_csv(index=False).encode('utf-8')
         st.download_button(
             label="📥 Download Audit Report",
