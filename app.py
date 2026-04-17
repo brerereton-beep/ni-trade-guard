@@ -7,40 +7,40 @@ import pytz
 # 1. Page Config
 st.set_page_config(page_title="NI Trade Guard Pro", page_icon="🛡️", layout="wide")
 
-# 2. Header
+# 2. Header & Styling
 st.markdown("<h1 style='text-align: center;'>🛡️ NI Trade Guard Pro</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: gray;'>Windsor Framework Compliance Decision Support</p>", unsafe_allow_html=True)
 
-# 3. Sidebar
+# 3. Sidebar Configuration
 with st.sidebar:
     st.header("Shipment Input")
     mode = st.radio("Input Mode:", ["Manual", "Bulk CSV"])
     st.divider()
-    st.subheader("📞 Helplines")
+    st.subheader("📞 Compliance Helplines")
     st.write("**TSS:** 0800 060 8888")
     st.write("**DAERA:** 0300 200 7840")
 
 # 4. Input Handling
 final_list = []
 if mode == "Manual":
-    raw_text = st.sidebar.text_area("List Products:", "beef\n0203\npizza\n7210\npallets\nsensor")
+    raw_text = st.sidebar.text_area("List Products (one per line):", "beef\npallets\nsensor\nlasagna")
     if raw_text:
         final_list = [i.strip() for i in raw_text.split('\n') if i.strip()]
 else:
-    file = st.sidebar.file_uploader("Upload CSV", type=["csv"])
+    file = st.sidebar.file_uploader("Upload Shipment CSV", type=["csv"])
     if file:
         df = pd.read_csv(file)
-        # Assumes the first column contains the product description or code
+        # Automatically targets the first column for item descriptions
         final_list = df.iloc[:, 0].dropna().tolist()
 
-# 5. THE ENGINE
+# 5. THE ENGINE (The Brain of the App)
 if st.sidebar.button("🚀 Run Compliance Check"):
     if not final_list:
-        st.error("⚠️ No items found.")
+        st.error("⚠️ No items found. Please provide product descriptions or codes.")
     else:
         results = []
-        with st.spinner('🎡 Checking Chapters, Keywords, and Dual-Use lists...'):
-            # --- Timezone Setup ---
+        with st.spinner('Analyzing manifest against XI/UK Tariff Rules...'):
+            # Set Timezone to Belfast/London
             try:
                 tz = pytz.timezone('Europe/London')
                 timestamp = datetime.now(tz).strftime("%Y-%m-%d %H:%M")
@@ -48,23 +48,19 @@ if st.sidebar.button("🚀 Run Compliance Check"):
                 timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
             
             for item in final_list:
-                item_str = str(item).lower()
+                # Clean the input to prevent hidden space errors
+                item_str = str(item).lower().strip()
                 digits = ''.join(filter(str.isdigit, item_str))
                 chapter = digits[:2] if len(digits) >= 2 else ""
                 
-                # Default Setup
+                # Default Lane
                 lane, advice, color = "Green Lane", "UKIMS Only", "green"
                 
-                # --- RULE 1: CATEGORY 1 (RED) - INDUSTRIAL & DUAL-USE ---
-                # Focus: Steel, Aluminum, Chemicals, and Tech
+                # --- CATEGORY 1: RED LANE (INDUSTRIAL/DUAL-USE) ---
                 red_chapters = ["72", "73", "76", "28", "29", "84", "85", "90"]
                 red_keywords = ["steel", "aluminum", "iron", "chemical", "precision", "sensor", "drone", "military", "ballistic"]
                 
-                if chapter in red_chapters or any(x in item_str for x in red_keywords):
-                    lane, advice, color = "Category 1 (Red)", "Full Customs Declaration / License Check Required", "red"
-                
-                # --- RULE 2: CATEGORY 2 (ORANGE) - SPS, COMPOSITE, & PACKAGING ---
-                # Focus: Meat, Fish, Dairy, Veg, Prepared Meals, and Wood Packaging
+                # --- CATEGORY 2: ORANGE LANE (SPS/COMPOSITE/EXCISE) ---
                 orange_chapters = ["01", "02", "03", "04", "05", "07", "08", "09", "10", "12", "16", "19", "21", "44"]
                 orange_keywords = [
                     "beef", "pork", "chicken", "lamb", "mutton", "venison", "poultry", "meat", 
@@ -72,24 +68,28 @@ if st.sidebar.button("🚀 Run Compliance Check"):
                     "sausage", "bacon", "ham", "pizza", "lasagna", "ready meal", "pasta", 
                     "timber", "wood", "logs", "plant", "flower", "pallet", "crate", "box"
                 ]
+
+                # --- THE LOGIC GATE ---
+                # 1. Check RED first (Highest Priority)
+                if chapter in red_chapters or any(x in item_str for x in red_keywords):
+                    lane, advice, color = "Category 1 (Red)", "Full Customs Declaration / License Required", "red"
                 
-                # Only flag Orange if it wasn't already flagged Red
-                if (chapter in orange_chapters or any(x in item_str for x in orange_keywords)) and color != "red":
-                    lane, advice, color = "Category 2 (Orange)", "NIRMS: Health Cert (CHED) + 'Not for EU' Label", "orange"
+                # 2. Check ORANGE (SPS & Packaging)
+                elif chapter in orange_chapters or any(x in item_str for x in orange_keywords):
+                    lane, advice, color = "Category 2 (Orange)", "NIRMS: Health Cert (CHED) + Labeling", "orange"
 
-                # --- RULE 3: EXCISE (ORANGE) ---
-                elif (chapter == "22" or "alcohol" in item_str) and color != "red":
-                    lane, advice, color = "Category 2 (Orange)", "Excise Controls: Duty & Movement rules apply", "orange"
+                # 3. Check EXCISE
+                elif chapter == "22" or "alcohol" in item_str:
+                    lane, advice, color = "Category 2 (Orange)", "Excise Controls: Duty rules apply", "orange"
 
-                # --- RULE 4: API SEARCH (The Safety Net) ---
-                # If no keywords matched, check HMRC database for regulatory footnotes
-                elif digits and color == "green":
+                # 4. API SEARCH (HMRC/XI Safety Net)
+                elif digits:
                     try:
                         res = requests.get(f"https://www.trade-tariff.service.gov.uk/xi/api/v2/headings/{digits[:4]}", timeout=5)
                         if res.status_code == 200:
                             raw = res.text.lower()
                             if any(term in raw for term in ["veterinary", "animal health", "sanitary", "phytosanitary"]):
-                                lane, advice, color = "Category 2 (Orange)", "NIRMS: Health Cert Required", "orange"
+                                lane, advice, color = "Category 2 (Orange)", "NIRMS Required (API Detected)", "orange"
                     except:
                         pass
 
@@ -101,26 +101,24 @@ if st.sidebar.button("🚀 Run Compliance Check"):
                     "color": color
                 })
 
-        # 6. DISPLAY RESULTS
+        # 6. RESULTS DISPLAY
         st.divider()
         for r in results:
             with st.expander(f"{r['Product']} — {r['Lane']}", expanded=True):
-                if r['color'] == 'red': st.error(f"🔴 **Action:** {r['Action']}")
-                elif r['color'] == 'orange': st.warning(f"🟡 **Action:** {r['Action']}")
+                if r['color'] == 'red': st.error(f"🔴 **Action Required:** {r['Action']}")
+                elif r['color'] == 'orange': st.warning(f"🟡 **Action Required:** {r['Action']}")
                 else: st.success(f"🟢 **Action:** {r['Action']}")
 
+        # 7. AUDIT SUMMARY & DOWNLOAD
         if results:
             st.divider()
             st.subheader("📋 Shipment Audit Summary")
             df_final = pd.DataFrame(results).drop(columns=['color'])
-            
-            # Display summary table
             st.table(df_final)
             
-            # Prepare CSV download
             csv_file = df_final.to_csv(index=False).encode('utf-8')
             st.download_button(
-                label="📥 Download Official Audit Report",
+                label="📥 Download Official Audit Report (CSV)",
                 data=csv_file,
                 file_name=f"NI_Audit_{timestamp.replace(' ','_').replace(':','')}.csv",
                 mime="text/csv"
