@@ -1,22 +1,23 @@
 import streamlit as st
 import requests
 import pandas as pd
+from datetime import datetime
 
 # 1. Page Config
 st.set_page_config(page_title="NI Trade Guard Pro", page_icon="🛡️", layout="wide")
 
 # 2. Header
 st.markdown("<h1 style='text-align: center;'>🛡️ NI Trade Guard Pro</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: gray;'>Windsor Framework Decision Support</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: gray;'>Windsor Framework Compliance Decision Support</p>", unsafe_allow_html=True)
 
 # 3. Sidebar Resources
 with st.sidebar:
     st.header("Shipment Input")
     mode = st.radio("Input Mode:", ["Manual", "Bulk CSV"])
     st.divider()
-    st.subheader("📞 Helplines")
-    st.write("TSS: 0800 060 8888")
-    st.write("DAERA: 0300 200 7840")
+    st.subheader("📞 Official Helplines")
+    st.write("**TSS:** 0800 060 8888")
+    st.write("**DAERA:** 0300 200 7840")
 
 # 4. Input Handling
 final_list = []
@@ -36,24 +37,24 @@ if st.sidebar.button("🚀 Run Compliance Check"):
         st.error("⚠️ No items found.")
     else:
         results = []
+        # THE THROBBER
         with st.spinner('🎡 Spinning the wheel... cross-referencing Windsor Framework rules...'):
             for item in final_list:
                 item_str = str(item).lower()
-                # 1. Extract digits for API check
                 digits = ''.join(filter(str.isdigit, item_str))
                 
-                # 2. ACCURACY LAYER: Hard-coded category flags for NI Protocol
+                # Default
                 lane, advice, color = "Green Lane", "UKIMS Only", "green"
                 
-                # Check for Category 1 (RED - Steel/Industrial)
-                if any(x in item_str for x in ["steel", "72", "73", "aluminum", "76"]):
+                # Priority 1: Category 1 (RED)
+                if any(x in item_str for x in ["steel", "72", "73", "aluminum", "76", "iron"]):
                     lane, advice, color = "Category 1 (Red)", "Full Customs Declaration Required", "red"
                 
-                # Check for Category 2 (ORANGE - SPS/Veterinary)
-                elif any(x in item_str for x in ["beef", "pork", "chicken", "meat", "cheese", "dairy", "020", "040"]):
+                # Priority 2: Category 2 (ORANGE)
+                elif any(x in item_str for x in ["beef", "pork", "chicken", "meat", "cheese", "dairy", "020", "040", "milk"]):
                     lane, advice, color = "Category 2 (Orange)", "NIRMS: Health Cert (CHED-P) + 'Not for EU' Label", "orange"
 
-                # 3. API FALLBACK (If not caught by hard-rules)
+                # Priority 3: API Check for everything else
                 elif digits:
                     try:
                         res = requests.get(f"https://www.trade-tariff.service.gov.uk/xi/api/v2/headings/{digits[:4]}", timeout=5)
@@ -78,7 +79,18 @@ if st.sidebar.button("🚀 Run Compliance Check"):
             st.divider()
             st.subheader("📋 Shipment Audit Summary")
             df_final = pd.DataFrame(results).drop(columns=['color'])
+            
+            # Add Timestamp for professional record keeping
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            st.caption(f"Audit generated on: {current_time}")
+            
             st.table(df_final)
             
+            # Professional Download Button
             csv_file = df_final.to_csv(index=False).encode('utf-8')
-            st.download_button("📥 Download Official Audit", csv_file, "audit.csv", "text/csv")
+            st.download_button(
+                label="📥 Download Official Audit Report",
+                data=csv_file,
+                file_name=f"NI_Audit_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                mime="text/csv"
+            )
